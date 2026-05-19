@@ -1,0 +1,16 @@
+packages:
+  - .
+  - packages/*
+  - apps/*
+
+# Supply-chain cooldown: avoid resolving packages published too recently.
+minimumReleaseAge: 10080
+minimumReleaseAgeExclude: []
+
+# Prevent trust level downgrades for dependency metadata.
+trustPolicy: no-downgrade
+trustPolicyExclude: []
+
+# Build scripts must be explicitly reviewed and approved.
+onlyBuiltDependencies: []
+ignoredBuiltDependencies: []
