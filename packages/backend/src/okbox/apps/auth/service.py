@@ -1,7 +1,9 @@
 """Auth business logic."""
 
+import uuid
 from datetime import datetime, timedelta, timezone
 
+import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,10 +71,8 @@ async def refresh_access_token(db: AsyncSession, refresh_token: str) -> TokenRes
         payload = decode_token(refresh_token)
         if payload.get("type") != "refresh":
             raise UnauthorizedException("Invalid token type")
-    except Exception:
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError, KeyError, ValueError):
         raise UnauthorizedException("Invalid or expired refresh token")
-
-    import uuid
 
     user_id = uuid.UUID(payload["sub"])
     result = await db.execute(select(User).where(User.id == user_id))
