@@ -24,7 +24,10 @@ async def get_audit_logs(
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Query audit logs with filters and pagination."""
+    """Query audit logs with filters and pagination.
+
+    Restricted to admin users only - audit logs contain sensitive operational data.
+    """
     query = AuditLogQuery(
         user_id=user_id,
         action=action,
