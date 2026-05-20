@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from okbox.apps.auth.models import User
+from okbox.apps.auth.security import verify_password
 from okbox.apps.reports.models import Report
 from okbox.apps.signatures.models import Signature, SignatureRole, SignatureStatus
 from okbox.apps.signatures.schemas import (
@@ -47,8 +49,13 @@ async def sign_report(
     if not report.html_content:
         raise ValidationException("Report has no content to sign")
 
-    # TODO: Verify password (second authentication factor)
-    # In production: verify_password(request.password, user.password_hash)
+    # Second-factor authentication: verify password
+    user_result = await db.execute(select(User).where(User.id == request.signer_id))
+    signer_user = user_result.scalar_one_or_none()
+    if not signer_user:
+        raise NotFoundException("Signer user not found")
+    if not verify_password(request.password, signer_user.password_hash):
+        raise ForbiddenException("Password verification failed - signature rejected")
 
     # Verify signing order
     existing_sigs = await db.execute(
