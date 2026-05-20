@@ -76,8 +76,15 @@ async def query_variants(
         stmt = stmt.where(Variant.filter_status == filter_status)
         count_stmt = count_stmt.where(Variant.filter_status == filter_status)
 
-    # Sorting
-    sort_column = getattr(Variant, sort_by, Variant.position)
+    # Sorting (whitelist to prevent probing internal attributes)
+    ALLOWED_SORT_FIELDS = {
+        "position", "chromosome", "gene", "vaf", "depth",
+        "quality", "clinical_significance", "population_frequency",
+        "variant_type", "filter_status",
+    }
+    if sort_by not in ALLOWED_SORT_FIELDS:
+        sort_by = "position"
+    sort_column = getattr(Variant, sort_by)
     if sort_order == "desc":
         stmt = stmt.order_by(sort_column.desc())
     else:
