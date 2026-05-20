@@ -4,6 +4,7 @@ Generates HTML reports from templates with variable interpolation,
 then converts to PDF using WeasyPrint.
 """
 
+import html
 import logging
 import os
 import uuid
@@ -66,28 +67,28 @@ def build_report_context(
     interpretations: list[dict],
 ) -> dict:
     """Build the template context from various data sources."""
-    # Format variant table rows
+    # Format variant table rows (escape all user data to prevent XSS)
     variant_rows = ""
     for v in variants:
         variant_rows += f"""<tr>
-            <td>{v.get('gene', '-')}</td>
-            <td>{v.get('chromosome', '')}:{v.get('position', '')}</td>
-            <td>{v.get('hgvs_c', '-')}</td>
-            <td>{v.get('hgvs_p', '-')}</td>
-            <td>{v.get('vaf', '-')}</td>
-            <td>{v.get('pathogenicity', '-')}</td>
+            <td>{html.escape(str(v.get('gene', '-')))}</td>
+            <td>{html.escape(str(v.get('chromosome', '')))}:{html.escape(str(v.get('position', '')))}</td>
+            <td>{html.escape(str(v.get('hgvs_c', '-')))}</td>
+            <td>{html.escape(str(v.get('hgvs_p', '-')))}</td>
+            <td>{html.escape(str(v.get('vaf', '-')))}</td>
+            <td>{html.escape(str(v.get('pathogenicity', '-')))}</td>
         </tr>"""
 
     return {
         "report_date": datetime.now().strftime("%Y-%m-%d"),
-        "patient_name": patient_info.get("name", "-"),
-        "patient_no": patient_info.get("patient_no", "-"),
-        "patient_gender": patient_info.get("gender", "-"),
-        "patient_age": patient_info.get("age", "-"),
-        "sample_no": sample_info.get("sample_no", "-"),
-        "sample_type": sample_info.get("sample_type", "-"),
-        "panel_type": sample_info.get("panel_type", "-"),
-        "received_date": sample_info.get("received_date", "-"),
+        "patient_name": html.escape(patient_info.get("name", "-")),
+        "patient_no": html.escape(patient_info.get("patient_no", "-")),
+        "patient_gender": html.escape(patient_info.get("gender", "-")),
+        "patient_age": html.escape(str(patient_info.get("age", "-"))),
+        "sample_no": html.escape(sample_info.get("sample_no", "-")),
+        "sample_type": html.escape(sample_info.get("sample_type", "-")),
+        "panel_type": html.escape(sample_info.get("panel_type", "-")),
+        "received_date": html.escape(str(sample_info.get("received_date", "-"))),
         "qc_mean_depth": str(qc_results.get("mean_depth", "-")) if qc_results else "-",
         "qc_coverage": str(qc_results.get("coverage_30x", "-")) if qc_results else "-",
         "variant_count": str(len(variants)),
