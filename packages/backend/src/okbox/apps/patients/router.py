@@ -101,8 +101,7 @@ async def update_patient(
 
     update_data = request.model_dump(exclude_unset=True)
     for key, value in update_data.items():
-        if value is not None:
-            setattr(patient, key, value)
+        setattr(patient, key, value)
 
     await db.flush()
     await db.refresh(patient)

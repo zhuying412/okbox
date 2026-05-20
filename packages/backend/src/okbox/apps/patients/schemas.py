@@ -24,6 +24,13 @@ def desensitize_id_number(id_number: str | None) -> str | None:
     return id_number[:3] + "****" + id_number[-4:]
 
 
+def desensitize_phone(phone: str | None) -> str | None:
+    """Desensitize phone number: show first 3 + **** + last 4."""
+    if not phone or len(phone) < 7:
+        return phone
+    return phone[:3] + "****" + phone[-4:]
+
+
 class PatientCreateRequest(BaseModel):
     """Create patient request."""
 
@@ -80,7 +87,7 @@ class PatientResponse(BaseModel):
             gender=patient.gender,
             birth_date=patient.birth_date,
             id_number=desensitize_id_number(patient.id_number),
-            phone=patient.phone,
+            phone=desensitize_phone(patient.phone),
             diagnosis=patient.diagnosis,
             department=patient.department,
             attending_doctor=patient.attending_doctor,
