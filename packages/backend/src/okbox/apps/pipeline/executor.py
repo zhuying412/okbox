@@ -44,10 +44,14 @@ def execute_wdl_task(
     # Build miniwdl command
     cmd = ["miniwdl", "run", wdl_path, "--dir", run_dir]
 
-    # Add inputs
+    # Add inputs via JSON file to prevent command injection
     if inputs:
-        for key, value in inputs.items():
-            cmd.extend([f"{key}={value}"])
+        import json
+
+        inputs_file = os.path.join(run_dir, "inputs.json")
+        with open(inputs_file, "w") as f:
+            json.dump(inputs, f)
+        cmd.extend(["--input", inputs_file])
 
     logger.info("Executing WDL task %s: %s", task_id, " ".join(cmd))
 
@@ -98,21 +102,24 @@ def cancel_wdl_task(task_id: str) -> bool:
 
 
 def get_task_log(task_id: str) -> str:
-    """Read execution log for a task."""
+    """Read execution log for a task (limited to last 1MB)."""
     run_dir = os.path.join(RUNS_BASE_DIR, task_id)
     log_file = os.path.join(run_dir, "stdout.txt")
 
-    if os.path.exists(log_file):
-        with open(log_file) as f:
-            return f.read()
+    if not os.path.exists(log_file):
+        # Try miniwdl's log location
+        log_file = os.path.join(run_dir, "workflow.log")
 
-    # Try miniwdl's log location
-    wdl_log = os.path.join(run_dir, "workflow.log")
-    if os.path.exists(wdl_log):
-        with open(wdl_log) as f:
-            return f.read()
+    if not os.path.exists(log_file):
+        return f"No log file found for task {task_id}"
 
-    return f"No log file found for task {task_id}"
+    max_read = 1024 * 1024  # 1MB
+    file_size = os.path.getsize(log_file)
+    with open(log_file) as f:
+        if file_size > max_read:
+            f.seek(file_size - max_read)
+            f.readline()  # Skip partial line
+        return f.read()
 
 
 def _parse_outputs(run_dir: str) -> dict:

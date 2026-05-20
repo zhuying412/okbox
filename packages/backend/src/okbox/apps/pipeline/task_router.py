@@ -58,13 +58,21 @@ async def submit_task(
     await db.refresh(task)
 
     # Submit to Celery
-    celery_task_id = await PipelineTaskRunner.submit_task(
-        task_id=str(task.id),
-        wdl_path=pipeline.wdl_path,
-        inputs=request.inputs,
-        parameters=request.parameters,
-    )
-    task.celery_task_id = celery_task_id
+    try:
+        celery_task_id = await PipelineTaskRunner.submit_task(
+            task_id=str(task.id),
+            wdl_path=pipeline.wdl_path,
+            inputs=request.inputs,
+            parameters=request.parameters,
+        )
+        task.celery_task_id = celery_task_id
+    except Exception as e:
+        task.status = TaskStatus.FAILED
+        task.error_message = f"Failed to submit task: {str(e)}"
+        await db.flush()
+        await db.refresh(task)
+        return TaskResponse.model_validate(task)
+
     await db.flush()
 
     return TaskResponse.model_validate(task)
