@@ -32,6 +32,9 @@ async def create_interpretation(
     db: AsyncSession = Depends(get_db),
 ) -> InterpretationResponse:
     """Create a new clinical interpretation for a variant."""
+    if not request.interpreted_by:
+        raise ValidationException("interpreted_by is required for audit traceability")
+
     interpretation = VariantInterpretation(
         variant_id=request.variant_id,
         sample_id=request.sample_id,
@@ -40,6 +43,7 @@ async def create_interpretation(
         notes=request.notes,
         evidence=request.evidence,
         status=InterpretationStatus.INTERPRETED,
+        interpreted_by=request.interpreted_by,
         interpreted_at=datetime.now(timezone.utc),
     )
     db.add(interpretation)
@@ -53,7 +57,7 @@ async def create_interpretation(
         new_pathogenicity=request.pathogenicity.value,
         new_status=InterpretationStatus.INTERPRETED.value,
         notes=request.notes,
-        user_id=request.interpreted_by or uuid.uuid4(),
+        user_id=request.interpreted_by,
         username=None,
     )
     db.add(history)
@@ -100,7 +104,7 @@ async def update_interpretation(
         old_pathogenicity=old_pathogenicity,
         new_pathogenicity=interp.pathogenicity.value,
         notes=request.notes,
-        user_id=uuid.uuid4(),  # TODO: from auth context
+        user_id=interp.interpreted_by or uuid.uuid4(),  # Use original interpreter
     )
     db.add(history)
     await db.flush()
