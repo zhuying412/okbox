@@ -60,9 +60,14 @@ class AuditMiddleware(BaseHTTPMiddleware):
             body = await request.body()
             if body and len(body) < 10240:  # Max 10KB
                 parsed = json.loads(body)
-                # Mask sensitive fields
-                for key in ("password", "token", "secret", "secret_key"):
-                    if key in parsed:
+                # Mask sensitive fields (including nested)
+                sensitive_keys = {
+                    "password", "token", "secret", "secret_key",
+                    "authorization", "cookie", "api_key",
+                    "access_token", "refresh_token",
+                }
+                for key in list(parsed.keys()):
+                    if key.lower() in sensitive_keys:
                         parsed[key] = "***MASKED***"
                 request_body = parsed
         except (json.JSONDecodeError, UnicodeDecodeError):
@@ -90,7 +95,10 @@ class AuditMiddleware(BaseHTTPMiddleware):
                     resource_id=_extract_resource_id(request.url.path),
                     path=str(request.url.path),
                     request_body=request_body,
-                    ip_address=request.client.host if request.client else None,
+                    ip_address=(
+                        request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+                        or (request.client.host if request.client else None)
+                    ),
                     user_agent=request.headers.get("user-agent"),
                     status_code=response.status_code,
                 )
