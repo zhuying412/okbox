@@ -83,6 +83,11 @@ async def upload_chunk(
     # Read chunk data
     chunk_data = await file.read()
 
+    # Limit chunk size to 100MB
+    max_chunk_size = 100 * 1024 * 1024
+    if len(chunk_data) > max_chunk_size:
+        raise ValidationException("Chunk size exceeds maximum (100MB)")
+
     # Store chunk via MinIO
     storage = StorageService()
     storage.upload_chunk(
@@ -92,8 +97,8 @@ async def upload_chunk(
         data=chunk_data,
     )
 
-    # Update progress
-    record.uploaded_chunks = chunk_number
+    # Update progress - increment count (handles out-of-order uploads)
+    record.uploaded_chunks = max(record.uploaded_chunks, chunk_number)
     await db.flush()
 
     completed = record.uploaded_chunks >= record.total_chunks

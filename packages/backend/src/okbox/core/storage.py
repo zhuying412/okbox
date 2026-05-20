@@ -39,7 +39,13 @@ def build_object_path(sample_id: str, filename: str) -> str:
 
     Convention: samples/{sample_id}/{filename}
     """
-    return f"samples/{sample_id}/{filename}"
+    import os
+
+    # Sanitize filename to prevent path traversal
+    safe_name = os.path.basename(filename).replace("..", "")
+    if not safe_name:
+        safe_name = "unnamed_file"
+    return f"samples/{sample_id}/{safe_name}"
 
 
 def compute_file_hash(data: bytes, algorithm: str = "sha256") -> str:
