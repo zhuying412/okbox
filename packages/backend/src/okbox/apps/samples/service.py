@@ -3,6 +3,7 @@
 import csv
 import io
 import uuid
+from datetime import datetime
 
 from sqlalchemy import func as sa_func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,8 +78,7 @@ async def update_sample(
     # Apply updates
     update_data = request.model_dump(exclude_unset=True)
     for key, value in update_data.items():
-        if value is not None:
-            setattr(sample, key, value)
+        setattr(sample, key, value)
 
     await db.flush()
     await db.refresh(sample)
@@ -144,7 +144,9 @@ async def batch_import_samples(
                 patient_name=row.get("patient_name", "").strip() or None,
                 sample_type=SampleType(row.get("sample_type", "other").strip()),
                 panel_type=row.get("panel_type", "").strip() or "default",
-                received_date=row.get("received_date", ""),
+                received_date=datetime.strptime(
+                    row.get("received_date", "").strip(), "%Y-%m-%d"
+                ).date(),
                 created_by=user_id,
             )
             db.add(sample)

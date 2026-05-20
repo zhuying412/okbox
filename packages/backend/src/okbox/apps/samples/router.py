@@ -85,5 +85,8 @@ async def import_samples_endpoint(
 ) -> BatchImportResult:
     """Batch import samples from CSV/Excel file."""
     content = await file.read()
+    if len(content) > 10 * 1024 * 1024:  # 10MB limit
+        from okbox.core.exceptions import ValidationException
+        raise ValidationException("File too large. Maximum size is 10MB.")
     csv_content = content.decode("utf-8")
     return await batch_import_samples(db, csv_content)
