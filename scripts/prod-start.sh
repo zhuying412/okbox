@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ─── OKBox 生产环境启动脚本 ──────────────────────────────────────────
 # 使用 Docker Compose 生产配置启动所有服务（HTTP 模式）
+# 服务就绪检查通过 Nginx 入口和 docker compose exec，不依赖对外端口
 # 用法：./scripts/prod-start.sh
 set -euo pipefail
 
@@ -66,16 +67,40 @@ info "启动生产环境服务..."
 
 docker compose -f docker-compose.prod.yml up -d
 
-# ─── 健康检查 ────────────────────────────────────────────────────
+# ─── 健康检查（通过容器内命令和 Nginx 入口）──────────────────────
 info "执行健康检查..."
 
+# 基础服务检查（容器内执行）
 for i in $(seq 1 60); do
-    if curl -sf http://localhost/api/v1/health >/dev/null 2>&1; then
-        success "后端 API 健康检查通过（通过 Nginx）"
+    if docker compose -f docker-compose.prod.yml exec -T postgres pg_isready -U okbox >/dev/null 2>&1; then
+        success "PostgreSQL 已就绪"
         break
     fi
     if [ "$i" -eq 60 ]; then
-        error "后端健康检查超时（60秒）。查看日志: docker compose -f deploy/docker-compose.prod.yml logs backend"
+        error "PostgreSQL 启动超时"
+    fi
+    sleep 1
+done
+
+for i in $(seq 1 30); do
+    if docker compose -f docker-compose.prod.yml exec -T redis redis-cli ping >/dev/null 2>&1; then
+        success "Redis 已就绪"
+        break
+    fi
+    if [ "$i" -eq 30 ]; then
+        warn "Redis 可能未就绪"
+    fi
+    sleep 1
+done
+
+# 通过 Nginx 入口检查整体可用性
+for i in $(seq 1 60); do
+    if curl -sf http://localhost/api/v1/health >/dev/null 2>&1; then
+        success "应用健康检查通过（通过 Nginx 入口）"
+        break
+    fi
+    if [ "$i" -eq 60 ]; then
+        error "应用健康检查超时（60秒）。查看日志: docker compose -f docker-compose.prod.yml logs"
     fi
     sleep 2
 done
@@ -99,6 +124,8 @@ echo -e "${GREEN}═════════════════════
 echo ""
 echo -e "  ${BLUE}应用地址:${NC}     http://localhost"
 echo -e "  ${BLUE}API 健康检查:${NC} http://localhost/api/v1/health"
+echo ""
+echo -e "  ${YELLOW}注意: 仅 Nginx 端口(80)对外暴露，其他服务在内部网络通信${NC}"
 echo ""
 echo -e "  ${YELLOW}常用命令:${NC}"
 echo -e "    查看日志: docker compose -f deploy/docker-compose.prod.yml logs -f"

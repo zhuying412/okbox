@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ─── OKBox 开发环境启动脚本 ──────────────────────────────────────────
 # 使用 Docker Compose 启动所有服务（包括后端和前端的热重载模式）
+# 服务就绪检查通过 docker compose exec（容器内执行），不依赖对外端口
 # 用法：./scripts/dev-start.sh
 set -euo pipefail
 
@@ -48,9 +49,10 @@ info "使用 Docker Compose 启动所有开发服务..."
 cd "$PROJECT_ROOT/deploy"
 docker compose up -d --build
 
-# ─── 等待服务就绪 ────────────────────────────────────────────────
+# ─── 等待服务就绪（通过容器内命令检查，不依赖对外端口）─────────
 info "等待服务就绪..."
 
+# PostgreSQL（容器内检查）
 for i in $(seq 1 60); do
     if docker compose exec -T postgres pg_isready -U okbox >/dev/null 2>&1; then
         success "PostgreSQL 已就绪"
@@ -62,6 +64,7 @@ for i in $(seq 1 60); do
     sleep 1
 done
 
+# Redis（容器内检查）
 for i in $(seq 1 30); do
     if docker compose exec -T redis redis-cli ping >/dev/null 2>&1; then
         success "Redis 已就绪"
@@ -73,14 +76,26 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
-# 等待后端就绪
-for i in $(seq 1 60); do
-    if curl -sf http://localhost:8000/api/v1/health >/dev/null 2>&1; then
+# 后端 API（容器内检查）
+for i in $(seq 1 90); do
+    if docker compose exec -T backend curl -sf http://localhost:8000/api/v1/health >/dev/null 2>&1; then
         success "后端 API 已就绪"
         break
     fi
-    if [ "$i" -eq 60 ]; then
+    if [ "$i" -eq 90 ]; then
         warn "后端 API 启动较慢，请检查日志：docker compose logs backend"
+    fi
+    sleep 2
+done
+
+# 通过 Nginx 入口验证整体服务可用性
+for i in $(seq 1 30); do
+    if curl -sf http://localhost/api/v1/health >/dev/null 2>&1; then
+        success "Nginx 代理已就绪（整体服务可用）"
+        break
+    fi
+    if [ "$i" -eq 30 ]; then
+        warn "Nginx 可能未就绪，请检查日志：docker compose logs nginx"
     fi
     sleep 2
 done
@@ -91,11 +106,10 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN}  开发环境启动成功！${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
 echo ""
-echo -e "  ${BLUE}前端（Vite HMR）:${NC}  http://localhost:3000"
-echo -e "  ${BLUE}后端 API:${NC}         http://localhost:8000"
-echo -e "  ${BLUE}API 文档:${NC}         http://localhost:8000/api/docs"
-echo -e "  ${BLUE}Nginx 代理:${NC}       http://localhost"
-echo -e "  ${BLUE}MinIO 控制台:${NC}     http://localhost:9001 (minioadmin/minioadmin)"
+echo -e "  ${BLUE}应用入口:${NC}     http://localhost"
+echo -e "  ${BLUE}API 文档:${NC}     http://localhost/api/docs"
+echo ""
+echo -e "  ${YELLOW}注意: 所有服务通过 Nginx 代理访问，不对外暴露其他端口${NC}"
 echo ""
 echo -e "  ${YELLOW}常用命令:${NC}"
 echo -e "    查看日志:     docker compose -f deploy/docker-compose.yml logs -f"
@@ -103,8 +117,13 @@ echo -e "    查看后端日志: docker compose -f deploy/docker-compose.yml log
 echo -e "    查看前端日志: docker compose -f deploy/docker-compose.yml logs -f frontend"
 echo -e "    停止服务:     ./scripts/stop.sh"
 echo -e "    重启服务:     ./scripts/restart.sh"
+echo -e "    查看状态:     ./scripts/status.sh"
 echo ""
 echo -e "  ${YELLOW}热重载说明:${NC}"
 echo -e "    后端: 修改 packages/backend/src/ 下代码后自动重载"
 echo -e "    前端: 修改 packages/frontend/src/ 下代码后自动热更新"
+echo ""
+echo -e "  ${YELLOW}调试提示（需要直接访问内部服务时）:${NC}"
+echo -e "    PostgreSQL: docker compose exec postgres psql -U okbox"
+echo -e "    Redis CLI:  docker compose exec redis redis-cli"
 echo ""
