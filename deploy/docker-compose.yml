@@ -2,6 +2,7 @@ version: "3.9"
 
 # ─── 开发环境 Docker Compose 配置 ─────────────────────────────────────
 # 所有服务通过 Docker Compose 管理，后端和前端挂载代码目录实现热重载
+# 仅 Nginx 端口对外暴露，其他服务仅在 Docker 内部网络通信
 # 启动命令：./scripts/dev-start.sh 或 docker compose up
 
 services:
@@ -14,8 +15,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-okbox}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-okbox}
       POSTGRES_DB: ${POSTGRES_DB:-okbox}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -30,8 +31,8 @@ services:
     image: redis:7-alpine
     container_name: okbox-redis
     restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -49,13 +50,13 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
-    ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    expose:
+      - "9000"
+      - "9001"
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -79,12 +80,18 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-okbox}
       MINIO_USE_SSL: "false"
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key-not-for-production}
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
+    expose:
+      - "8000"
     volumes:
       # 挂载源代码实现热重载
       - ../packages/backend/src:/app/src:ro
       - ../packages/backend/alembic:/app/alembic:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,8 +107,8 @@ services:
     restart: unless-stopped
     working_dir: /app
     command: ["sh", "-c", "corepack enable && pnpm install && pnpm dev --host 0.0.0.0"]
-    ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+    expose:
+      - "3000"
     volumes:
       # 挂载源代码实现热重载
       - ../packages/frontend:/app
@@ -111,7 +118,7 @@ services:
     depends_on:
       - backend
 
-  # ─── Nginx 反向代理 ──────────────────────────────────────────
+  # ─── Nginx 反向代理（唯一对外暴露端口）───────────────────────
   nginx:
     image: nginx:alpine
     container_name: okbox-nginx
