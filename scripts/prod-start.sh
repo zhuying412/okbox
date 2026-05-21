@@ -99,12 +99,15 @@ done
 
 # 通过 Nginx 入口检查整体可用性
 for i in $(seq 1 60); do
-    if curl -sf http://localhost:${NGINX_PORT}/api/v1/health >/dev/null 2>&1; then
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${NGINX_PORT}/api/v1/health 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" = "200" ]; then
         success "应用健康检查通过（通过 Nginx 入口）"
         break
     fi
     if [ "$i" -eq 60 ]; then
-        error "应用健康检查超时（60秒）。查看日志: docker compose -f docker-compose.prod.yml logs"
+        error "应用健康检查超时（60秒），HTTP 状态码: ${HTTP_CODE}
+响应: $(curl -s http://localhost:${NGINX_PORT}/api/v1/health 2>&1 | head -3)
+查看日志: docker compose -f docker-compose.prod.yml logs backend"
     fi
     sleep 2
 done
