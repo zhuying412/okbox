@@ -94,12 +94,14 @@ done
 
 # 通过 Nginx 入口验证整体服务可用性
 for i in $(seq 1 30); do
-    if curl -sf http://localhost:${NGINX_PORT}/api/v1/health >/dev/null 2>&1; then
+    if curl -sSf http://localhost:${NGINX_PORT}/api/v1/health >/dev/null 2>/dev/null; then
         success "Nginx 代理已就绪（整体服务可用）"
         break
     fi
     if [ "$i" -eq 30 ]; then
         warn "Nginx 可能未就绪，请检查日志：docker compose logs nginx"
+        warn "诊断信息："
+        curl -sS http://localhost:${NGINX_PORT}/api/v1/health 2>&1 | head -5 || true
     fi
     sleep 2
 done

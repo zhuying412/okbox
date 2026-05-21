@@ -52,10 +52,11 @@ echo ""
 info "健康检查（容器内执行）:"
 
 # Nginx 入口检查（唯一对外端口）
-if curl -sf http://localhost:${NGINX_PORT}/api/v1/health >/dev/null 2>&1; then
+NGINX_HEALTH=$(curl -sS http://localhost:${NGINX_PORT}/api/v1/health 2>&1)
+if [ $? -eq 0 ]; then
     success "应用入口:    http://localhost:${NGINX_PORT} (健康)"
 else
-    warn "应用入口:    http://localhost:${NGINX_PORT} (未响应)"
+    warn "应用入口:    http://localhost:${NGINX_PORT} (未响应: ${NGINX_HEALTH})"
 fi
 
 # PostgreSQL（容器内检查）
