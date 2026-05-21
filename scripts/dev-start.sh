@@ -1,180 +1,110 @@
 #!/usr/bin/env bash
-# ─── OKBox Development Environment Startup Script ───────────────────
-# Usage: ./scripts/dev-start.sh
-# Prerequisites: Docker, Docker Compose, Node.js (pnpm), Python (uv)
+# ─── OKBox 开发环境启动脚本 ──────────────────────────────────────────
+# 使用 Docker Compose 启动所有服务（包括后端和前端的热重载模式）
+# 用法：./scripts/dev-start.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Colors
+# 颜色
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-success() { echo -e "${GREEN}[OK]${NC} $1"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+info() { echo -e "${BLUE}[信息]${NC} $1"; }
+success() { echo -e "${GREEN}[完成]${NC} $1"; }
+warn() { echo -e "${YELLOW}[警告]${NC} $1"; }
+error() { echo -e "${RED}[错误]${NC} $1"; exit 1; }
 
 echo -e "${GREEN}"
 echo "  ╔═══════════════════════════════════════╗"
-echo "  ║   OKBox Development Environment      ║"
+echo "  ║   OKBox 开发环境                      ║"
 echo "  ╚═══════════════════════════════════════╝"
 echo -e "${NC}"
 
-# ─── Check Prerequisites ────────────────────────────────────────────
-info "Checking prerequisites..."
+# ─── 检查前置条件 ────────────────────────────────────────────────
+info "检查前置条件..."
 
-command -v docker >/dev/null 2>&1 || error "Docker is not installed"
-command -v docker compose >/dev/null 2>&1 || error "Docker Compose is not installed"
+command -v docker >/dev/null 2>&1 || error "Docker 未安装"
+command -v docker compose >/dev/null 2>&1 || error "Docker Compose 未安装"
+success "Docker 环境就绪"
 
-if command -v uv >/dev/null 2>&1; then
-    success "uv found: $(uv --version)"
-elif command -v pip >/dev/null 2>&1; then
-    warn "uv not found, will use pip"
-else
-    error "Neither uv nor pip is installed"
-fi
-
-if command -v pnpm >/dev/null 2>&1; then
-    success "pnpm found: $(pnpm --version)"
-elif command -v npm >/dev/null 2>&1; then
-    warn "pnpm not found, will use npm"
-else
-    error "Neither pnpm nor npm is installed"
-fi
-
-# ─── Setup Environment File ─────────────────────────────────────────
-info "Checking environment configuration..."
-
-if [ ! -f "$PROJECT_ROOT/.env" ]; then
-    if [ -f "$PROJECT_ROOT/.env.example" ]; then
-        cp "$PROJECT_ROOT/.env.example" "$PROJECT_ROOT/.env"
-        success "Created .env from .env.example"
-    fi
-fi
+# ─── 初始化环境文件 ──────────────────────────────────────────────
+info "检查环境配置..."
 
 if [ ! -f "$PROJECT_ROOT/deploy/.env" ]; then
     if [ -f "$PROJECT_ROOT/deploy/.env.example" ]; then
         cp "$PROJECT_ROOT/deploy/.env.example" "$PROJECT_ROOT/deploy/.env"
-        success "Created deploy/.env from deploy/.env.example"
+        success "已从 .env.example 创建 deploy/.env"
     fi
 fi
 
-# ─── Start Docker Services (DB, Redis, MinIO) ───────────────────────
-info "Starting Docker Compose development services..."
+# ─── 使用 Docker Compose 启动所有服务 ────────────────────────────
+info "使用 Docker Compose 启动所有开发服务..."
 
 cd "$PROJECT_ROOT/deploy"
-docker compose up -d postgres redis minio
+docker compose up -d --build
 
-# Wait for services to be healthy
-info "Waiting for services to be ready..."
-for i in $(seq 1 30); do
+# ─── 等待服务就绪 ────────────────────────────────────────────────
+info "等待服务就绪..."
+
+for i in $(seq 1 60); do
     if docker compose exec -T postgres pg_isready -U okbox >/dev/null 2>&1; then
-        success "PostgreSQL is ready"
+        success "PostgreSQL 已就绪"
+        break
+    fi
+    if [ "$i" -eq 60 ]; then
+        error "PostgreSQL 启动超时（60秒）"
+    fi
+    sleep 1
+done
+
+for i in $(seq 1 30); do
+    if docker compose exec -T redis redis-cli ping >/dev/null 2>&1; then
+        success "Redis 已就绪"
         break
     fi
     if [ "$i" -eq 30 ]; then
-        error "PostgreSQL failed to start within 30 seconds"
+        warn "Redis 可能未就绪"
     fi
     sleep 1
 done
 
-for i in $(seq 1 15); do
-    if docker compose exec -T redis redis-cli ping >/dev/null 2>&1; then
-        success "Redis is ready"
+# 等待后端就绪
+for i in $(seq 1 60); do
+    if curl -sf http://localhost:8000/api/v1/health >/dev/null 2>&1; then
+        success "后端 API 已就绪"
         break
     fi
-    if [ "$i" -eq 15 ]; then
-        warn "Redis may not be ready"
+    if [ "$i" -eq 60 ]; then
+        warn "后端 API 启动较慢，请检查日志：docker compose logs backend"
     fi
-    sleep 1
+    sleep 2
 done
 
-success "Docker services started"
-
-# ─── Install Backend Dependencies ────────────────────────────────────
-info "Installing backend dependencies..."
-
-cd "$PROJECT_ROOT/packages/backend"
-if command -v uv >/dev/null 2>&1; then
-    uv sync
-else
-    pip install -e ".[dev]"
-fi
-success "Backend dependencies installed"
-
-# ─── Initialize Database ─────────────────────────────────────────────
-info "Running database migrations..."
-
-if command -v uv >/dev/null 2>&1; then
-    uv run alembic upgrade head 2>/dev/null || warn "No migrations to run (alembic not configured yet)"
-else
-    alembic upgrade head 2>/dev/null || warn "No migrations to run (alembic not configured yet)"
-fi
-success "Database initialized"
-
-# ─── Install Frontend Dependencies ───────────────────────────────────
-info "Installing frontend dependencies..."
-
-cd "$PROJECT_ROOT/packages/frontend"
-if command -v pnpm >/dev/null 2>&1; then
-    pnpm install
-else
-    npm install
-fi
-success "Frontend dependencies installed"
-
-# ─── Cleanup Handler (defined before starting servers) ───────────────
-cleanup() {
-    echo ""
-    info "Shutting down development servers..."
-    pkill -f "uvicorn okbox.main:app" || true
-    pkill -f "vite" || true
-    info "Stopping Docker services..."
-    cd "$PROJECT_ROOT/deploy" && docker compose stop
-    success "All services stopped"
-}
-
-trap cleanup EXIT INT TERM
-
-# ─── Start Development Servers ───────────────────────────────────────
-info "Starting development servers..."
-
-# Start backend (in background)
-cd "$PROJECT_ROOT/packages/backend"
-if command -v uv >/dev/null 2>&1; then
-    uv run uvicorn okbox.main:app --reload --host 0.0.0.0 --port 8000 &
-else
-    python -m uvicorn okbox.main:app --reload --host 0.0.0.0 --port 8000 &
-fi
-BACKEND_PID=$!
-
-# Start frontend (in background)
-cd "$PROJECT_ROOT/packages/frontend"
-if command -v pnpm >/dev/null 2>&1; then
-    pnpm dev &
-else
-    npm run dev &
-fi
-FRONTEND_PID=$!
-
-# ─── Print Access Information ────────────────────────────────────────
+# ─── 输出访问信息 ────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  Development environment started successfully!${NC}"
+echo -e "${GREEN}  开发环境启动成功！${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
 echo ""
-echo -e "  ${BLUE}Frontend:${NC}   http://localhost:3000"
-echo -e "  ${BLUE}Backend:${NC}    http://localhost:8000"
-echo -e "  ${BLUE}API Docs:${NC}   http://localhost:8000/api/docs"
-echo -e "  ${BLUE}MinIO:${NC}      http://localhost:9001 (admin/minioadmin)"
+echo -e "  ${BLUE}前端（Vite HMR）:${NC}  http://localhost:3000"
+echo -e "  ${BLUE}后端 API:${NC}         http://localhost:8000"
+echo -e "  ${BLUE}API 文档:${NC}         http://localhost:8000/api/docs"
+echo -e "  ${BLUE}Nginx 代理:${NC}       http://localhost"
+echo -e "  ${BLUE}MinIO 控制台:${NC}     http://localhost:9001 (minioadmin/minioadmin)"
 echo ""
-echo -e "  ${YELLOW}Press Ctrl+C to stop all services${NC}"
+echo -e "  ${YELLOW}常用命令:${NC}"
+echo -e "    查看日志:     docker compose -f deploy/docker-compose.yml logs -f"
+echo -e "    查看后端日志: docker compose -f deploy/docker-compose.yml logs -f backend"
+echo -e "    查看前端日志: docker compose -f deploy/docker-compose.yml logs -f frontend"
+echo -e "    停止服务:     ./scripts/stop.sh"
+echo -e "    重启服务:     ./scripts/restart.sh"
 echo ""
-
-# Wait for background processes
-wait
+echo -e "  ${YELLOW}热重载说明:${NC}"
+echo -e "    后端: 修改 packages/backend/src/ 下代码后自动重载"
+echo -e "    前端: 修改 packages/frontend/src/ 下代码后自动热更新"
+echo ""

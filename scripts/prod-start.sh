@@ -1,122 +1,108 @@
 #!/usr/bin/env bash
-# ─── OKBox Production Environment Startup Script ─────────────────────
-# Usage: ./scripts/prod-start.sh
-# Prerequisites: Docker, Docker Compose
+# ─── OKBox 生产环境启动脚本 ──────────────────────────────────────────
+# 使用 Docker Compose 生产配置启动所有服务（HTTP 模式）
+# 用法：./scripts/prod-start.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Colors
+# 颜色
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-success() { echo -e "${GREEN}[OK]${NC} $1"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+info() { echo -e "${BLUE}[信息]${NC} $1"; }
+success() { echo -e "${GREEN}[完成]${NC} $1"; }
+warn() { echo -e "${YELLOW}[警告]${NC} $1"; }
+error() { echo -e "${RED}[错误]${NC} $1"; exit 1; }
 
 echo -e "${GREEN}"
 echo "  ╔═══════════════════════════════════════╗"
-echo "  ║   OKBox Production Deployment         ║"
+echo "  ║   OKBox 生产环境部署                  ║"
 echo "  ╚═══════════════════════════════════════╝"
 echo -e "${NC}"
 
-# ─── Check Prerequisites ────────────────────────────────────────────
-info "Checking prerequisites..."
+# ─── 检查前置条件 ────────────────────────────────────────────────
+info "检查前置条件..."
 
-command -v docker >/dev/null 2>&1 || error "Docker is not installed"
-command -v docker compose >/dev/null 2>&1 || error "Docker Compose is not installed"
+command -v docker >/dev/null 2>&1 || error "Docker 未安装"
+command -v docker compose >/dev/null 2>&1 || error "Docker Compose 未安装"
+success "Docker 环境就绪"
 
-# ─── Check Environment Configuration ────────────────────────────────
-info "Checking environment configuration..."
+# ─── 检查环境配置 ────────────────────────────────────────────────
+info "检查环境配置..."
 
 ENV_FILE="$PROJECT_ROOT/deploy/.env"
 
 if [ ! -f "$ENV_FILE" ]; then
-    error "deploy/.env not found. Copy deploy/.env.example and configure it first."
+    error "deploy/.env 不存在。请先复制 deploy/.env.example 并配置。"
 fi
 
-# Check critical environment variables (safely read without sourcing)
+# 安全读取环境变量（不使用 source）
 SECRET_KEY=$(grep -E "^SECRET_KEY=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "")
 POSTGRES_PASSWORD=$(grep -E "^POSTGRES_PASSWORD=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "")
-MINIO_SECRET_KEY=$(grep -E "^MINIO_SECRET_KEY=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "")
 
 if [ "${SECRET_KEY}" = "change-me-in-production" ] || [ -z "${SECRET_KEY}" ]; then
-    error "SECRET_KEY must be changed from default value! Generate with: openssl rand -hex 32"
+    error "SECRET_KEY 必须修改！生成命令: openssl rand -hex 32"
 fi
 
-if [ "${POSTGRES_PASSWORD}" = "okbox" ]; then
-    warn "POSTGRES_PASSWORD is still the default value. Consider changing for production."
+if [ "${POSTGRES_PASSWORD}" = "okbox" ] || [ -z "${POSTGRES_PASSWORD}" ]; then
+    warn "POSTGRES_PASSWORD 仍为默认值，建议修改"
 fi
 
-if [ "${MINIO_SECRET_KEY}" = "minioadmin" ]; then
-    warn "MINIO_SECRET_KEY is still the default value. Consider changing for production."
-fi
+success "环境配置验证通过"
 
-success "Environment configuration validated"
-
-# ─── Check SSL Certificate ───────────────────────────────────────────
-info "Checking SSL certificate..."
-
-if [ ! -f "$PROJECT_ROOT/deploy/nginx/ssl/okbox.crt" ]; then
-    warn "SSL certificate not found. Generating self-signed certificate..."
-    bash "$PROJECT_ROOT/deploy/nginx/generate-cert.sh"
-    success "Self-signed certificate generated"
-else
-    success "SSL certificate found"
-fi
-
-# ─── Build and Start Services ────────────────────────────────────────
-info "Building Docker images..."
+# ─── 构建生产镜像 ────────────────────────────────────────────────
+info "构建生产 Docker 镜像..."
 
 cd "$PROJECT_ROOT/deploy"
-docker compose build --no-cache
+docker compose -f docker-compose.prod.yml build
 
-info "Starting production services..."
-docker compose up -d
+# ─── 启动生产服务 ────────────────────────────────────────────────
+info "启动生产环境服务..."
 
-# ─── Health Check ────────────────────────────────────────────────────
-info "Running health checks..."
+docker compose -f docker-compose.prod.yml up -d
 
-# Wait for backend to be ready
+# ─── 健康检查 ────────────────────────────────────────────────────
+info "执行健康检查..."
+
 for i in $(seq 1 60); do
-    if curl -sf https://localhost/api/v1/health -k >/dev/null 2>&1; then
-        success "Backend API is healthy (via Nginx HTTPS)"
+    if curl -sf http://localhost/api/v1/health >/dev/null 2>&1; then
+        success "后端 API 健康检查通过（通过 Nginx）"
         break
     fi
     if [ "$i" -eq 60 ]; then
-        error "Backend failed health check within 60 seconds. Check logs: docker compose logs backend"
+        error "后端健康检查超时（60秒）。查看日志: docker compose -f deploy/docker-compose.prod.yml logs backend"
     fi
     sleep 2
 done
 
-# Check all containers are running
-RUNNING=$(docker compose ps --format "{{.Service}}: {{.Status}}" | grep -c "running" || true)
-TOTAL=$(docker compose ps --format "{{.Service}}" | wc -l)
+# 检查所有容器状态
+RUNNING=$(docker compose -f docker-compose.prod.yml ps --format "{{.Service}}: {{.Status}}" | grep -c "running" || true)
+TOTAL=$(docker compose -f docker-compose.prod.yml ps --format "{{.Service}}" | wc -l)
 
 if [ "$RUNNING" -eq "$TOTAL" ]; then
-    success "All $TOTAL services are running"
+    success "全部 $TOTAL 个服务正在运行"
 else
-    warn "Only $RUNNING/$TOTAL services are running"
-    docker compose ps
+    warn "仅 $RUNNING/$TOTAL 个服务在运行"
+    docker compose -f docker-compose.prod.yml ps
 fi
 
-# ─── Print Status ────────────────────────────────────────────────────
+# ─── 输出状态 ────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  Production environment started successfully!${NC}"
+echo -e "${GREEN}  生产环境启动成功！${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
 echo ""
-echo -e "  ${BLUE}Application:${NC}  https://localhost"
-echo -e "  ${BLUE}API Health:${NC}   https://localhost/api/v1/health"
+echo -e "  ${BLUE}应用地址:${NC}     http://localhost"
+echo -e "  ${BLUE}API 健康检查:${NC} http://localhost/api/v1/health"
 echo ""
-echo -e "  ${YELLOW}Useful commands:${NC}"
-echo -e "    View logs:     docker compose -f deploy/docker-compose.yml logs -f"
-echo -e "    View status:   ./scripts/status.sh"
-echo -e "    Stop services: ./scripts/stop.sh"
-echo -e "    Restart:       ./scripts/restart.sh"
+echo -e "  ${YELLOW}常用命令:${NC}"
+echo -e "    查看日志: docker compose -f deploy/docker-compose.prod.yml logs -f"
+echo -e "    查看状态: ./scripts/status.sh"
+echo -e "    停止服务: ./scripts/stop.sh"
+echo -e "    重启服务: ./scripts/restart.sh"
 echo ""
