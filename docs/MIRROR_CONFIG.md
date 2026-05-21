@@ -24,26 +24,6 @@
 - **配置位置**：
   - `packages/backend/Dockerfile` → sed 替换源
 
-## Docker 镜像加速
-
-Docker 基础镜像加速需要在 **宿主机** 配置 Docker daemon：
-
-```bash
-# 编辑 Docker daemon 配置
-sudo tee /etc/docker/daemon.json <<EOF
-{
-  "registry-mirrors": [
-    "https://registry.cn-hangzhou.aliyuncs.com",
-    "https://mirror.ccs.tencentyun.com"
-  ]
-}
-EOF
-
-# 重启 Docker
-sudo systemctl daemon-reload
-sudo systemctl restart docker
-```
-
 ## 切换回默认源（海外部署）
 
 如果在海外环境部署，需要切换回默认源：
@@ -66,9 +46,6 @@ sudo systemctl restart docker
 ### apt
 删除 `Dockerfile` 中的 sed 替换行。
 
-### Docker
-清空或删除 `/etc/docker/daemon.json` 中的 `registry-mirrors` 配置。
-
 ## 备选镜像源
 
 | 组件 | 备选源 |
@@ -76,4 +53,3 @@ sudo systemctl restart docker
 | Python | 阿里源 `https://mirrors.aliyun.com/pypi/simple` |
 | apt | 清华源 `https://mirrors.tuna.tsinghua.edu.cn/debian` |
 | npm | 华为源 `https://repo.huaweicloud.com/repository/npm/` |
-| Docker | 华为 `https://mirrors.huaweicloud.com` |
