@@ -64,10 +64,14 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle unexpected exceptions."""
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "error": "Internal server error",
-            "detail": None,
+            "detail": str(exc) if request.app.debug else None,
         },
     )

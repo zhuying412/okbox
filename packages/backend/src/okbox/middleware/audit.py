@@ -12,15 +12,12 @@ import uuid
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
-from okbox.apps.audit.models import AuditLog
-from okbox.core.database import async_session_factory
-
 logger = logging.getLogger(__name__)
 
 # HTTP methods that trigger audit logging
 AUDITABLE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
-# Paths to exclude from audit logging
+# Paths to exclude from audit logging (also skip middleware processing entirely)
 EXCLUDED_PATHS = {"/api/v1/health", "/api/docs", "/api/redoc", "/api/openapi.json"}
 
 
@@ -46,9 +43,11 @@ class AuditMiddleware(BaseHTTPMiddleware):
     """Middleware that records all write operations for audit compliance."""
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        # Skip non-auditable methods entirely
         if request.method not in AUDITABLE_METHODS:
             return await call_next(request)
 
+        # Skip excluded paths
         if request.url.path in EXCLUDED_PATHS:
             return await call_next(request)
 
@@ -83,8 +82,11 @@ class AuditMiddleware(BaseHTTPMiddleware):
             user_id = request.state.user_id
             username = getattr(request.state, "username", None)
 
-        # Create audit log entry asynchronously
+        # Create audit log entry asynchronously (lazy import to avoid startup issues)
         try:
+            from okbox.apps.audit.models import AuditLog
+            from okbox.core.database import async_session_factory
+
             async with async_session_factory() as session:
                 audit_entry = AuditLog(
                     id=uuid.uuid4(),

@@ -7,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from okbox.core.config import settings
 from okbox.core.exceptions import AppException, app_exception_handler, unhandled_exception_handler
-from okbox.middleware.audit import AuditMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -24,13 +23,20 @@ def create_app() -> FastAPI:
         description="OKBox NGS Data Analysis Platform",
         docs_url="/api/docs" if settings.app_env == "development" else None,
         redoc_url="/api/redoc" if settings.app_env == "development" else None,
+        debug=settings.debug,
     )
 
     # Exception handlers
     app.add_exception_handler(AppException, app_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
 
+    # Register routes (before middleware, so health check is available)
+    _register_routes(app)
+
     # Middleware (order matters: last added = first executed)
+    # Only add AuditMiddleware if database is configured
+    from okbox.middleware.audit import AuditMiddleware
+
     app.add_middleware(AuditMiddleware)
     app.add_middleware(
         CORSMiddleware,
@@ -39,9 +45,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    # Register routes
-    _register_routes(app)
 
     return app
 
