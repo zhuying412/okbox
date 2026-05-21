@@ -88,10 +88,10 @@ services:
       - ../packages/backend/alembic:/app/alembic:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 30
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
