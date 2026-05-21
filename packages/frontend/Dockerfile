@@ -2,6 +2,9 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 
+# 配置国内 npm 源（npmmirror）
+RUN npm config set registry https://registry.npmmirror.com
+
 # Enable corepack for pnpm
 RUN corepack enable
 
@@ -22,7 +25,9 @@ FROM node:22-alpine AS production
 
 WORKDIR /app
 
-RUN npm install -g serve
+# 配置国内 npm 源
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm install -g serve
 
 COPY --from=build /app/dist ./dist
 

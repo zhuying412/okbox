@@ -34,3 +34,8 @@ select = ["E", "F", "I", "N", "W", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+# ─── 国内镜像源配置（清华源）──────────────────────────────────
+# uv 会自动读取此配置。如需切换回默认源（海外部署），注释以下行即可。
+[tool.uv]
+index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
