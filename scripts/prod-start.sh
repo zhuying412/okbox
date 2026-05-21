@@ -56,6 +56,10 @@ fi
 
 success "环境配置验证通过"
 
+# ─── 读取 Nginx 端口配置 ─────────────────────────────────────────
+NGINX_PORT=$(grep -E "^NGINX_PORT=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "80")
+NGINX_PORT="${NGINX_PORT:-80}"
+
 # ─── 构建生产镜像 ────────────────────────────────────────────────
 info "构建生产 Docker 镜像..."
 
@@ -95,7 +99,7 @@ done
 
 # 通过 Nginx 入口检查整体可用性
 for i in $(seq 1 60); do
-    if curl -sf http://localhost/api/v1/health >/dev/null 2>&1; then
+    if curl -sf http://localhost:${NGINX_PORT}/api/v1/health >/dev/null 2>&1; then
         success "应用健康检查通过（通过 Nginx 入口）"
         break
     fi
@@ -122,10 +126,15 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN}  生产环境启动成功！${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
 echo ""
-echo -e "  ${BLUE}应用地址:${NC}     http://localhost"
-echo -e "  ${BLUE}API 健康检查:${NC} http://localhost/api/v1/health"
+if [ "$NGINX_PORT" = "80" ]; then
+    echo -e "  ${BLUE}应用地址:${NC}     http://localhost"
+    echo -e "  ${BLUE}API 健康检查:${NC} http://localhost/api/v1/health"
+else
+    echo -e "  ${BLUE}应用地址:${NC}     http://localhost:${NGINX_PORT}"
+    echo -e "  ${BLUE}API 健康检查:${NC} http://localhost:${NGINX_PORT}/api/v1/health"
+fi
 echo ""
-echo -e "  ${YELLOW}注意: 仅 Nginx 端口(80)对外暴露，其他服务在内部网络通信${NC}"
+echo -e "  ${YELLOW}注意: 仅 Nginx 端口(${NGINX_PORT})对外暴露，其他服务在内部网络通信${NC}"
 echo ""
 echo -e "  ${YELLOW}常用命令:${NC}"
 echo -e "    查看日志: docker compose -f deploy/docker-compose.prod.yml logs -f"
