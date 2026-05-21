@@ -21,7 +21,7 @@ docker compose ps
 **Resolution**:
 ```bash
 # Check port conflicts
-ss -tlnp | grep -E "(5432|6379|9000|8000|80|443)"
+ss -tlnp | grep -E "(5432|6379|9000|8000|80)"
 
 # Fix volume permissions
 chmod -R 777 /path/to/data/volumes  # Dev only; use proper UID in prod
@@ -87,14 +87,14 @@ docker compose logs backend | grep "PDF"
 - Install Chinese fonts for CJK support
 - Check write permissions to reports output directory
 
-### 6. SSL Certificate Issues
+### 6. Connection Issues
 
-**Symptom**: Browser shows "certificate not trusted" warning.
+**Symptom**: Unable to access application from browser.
 
 **Resolution**:
-- This is expected for self-signed certificates
-- Add certificate to client trust store for internal tools
-- For production: use CA-signed certificate
+- Verify Nginx container is running: `docker compose ps nginx`
+- Check if port 80 is available: `ss -tlnp | grep :80`
+- If HTTPS is required, configure it at the external reverse proxy / load balancer layer
 
 ## Log Analysis
 

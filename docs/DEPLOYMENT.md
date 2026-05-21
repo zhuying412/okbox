@@ -15,7 +15,6 @@
 - Docker Engine 24+
 - Docker Compose v2.20+
 - Git 2.30+
-- OpenSSL 3.0+
 
 ## Installation Steps
 
@@ -54,21 +53,13 @@ Key configurations:
 - `MINIO_SECRET_KEY`: MinIO secret key
 - `ENCRYPTION_KEY`: Field encryption key (generate: `python -c "import secrets; print(secrets.token_hex(32))"`)
 
-### 4. Generate SSL Certificate
-
-```bash
-cd nginx
-./generate-cert.sh
-cd ..
-```
-
-### 5. Start Services
+### 4. Start Services
 
 ```bash
 docker compose up -d
 ```
 
-### 6. Initialize Database
+### 5. Initialize Database
 
 ```bash
 # Run migrations
@@ -78,14 +69,14 @@ docker compose exec backend alembic upgrade head
 docker compose exec backend python -m okbox.scripts.create_admin
 ```
 
-### 7. Verify Installation
+### 6. Verify Installation
 
 ```bash
 # Check all services are running
 docker compose ps
 
 # Health check
-curl -k https://localhost/api/v1/health
+curl http://localhost/api/v1/health
 ```
 
 ## Configuration Reference
@@ -99,14 +90,23 @@ curl -k https://localhost/api/v1/health
 | SECRET_KEY | JWT signing secret | - |
 | ENCRYPTION_KEY | AES field encryption key | - |
 
+## Network Mode
+
+本项目使用 **HTTP 模式**部署，原因如下：
+
+- OKBox 面向医院局域网（Intranet）部署，不暴露到公网
+- 局域网内通信安全由网络隔离保障，无需 TLS 加密
+- 简化部署流程，减少证书管理负担
+
+如需 HTTPS 加密传输（例如跨网段访问），建议在外部反向代理层（如负载均衡器或网关）配置 SSL/TLS，OKBox 本身保持 HTTP 模式不变。
+
 ## Firewall Rules
 
 For hospital intranet deployment:
 
 | Port | Service | Access |
 |------|---------|--------|
-| 443 | HTTPS (Nginx) | Internal network |
-| 80 | HTTP (redirect) | Internal network |
+| 80 | HTTP (Nginx) | Internal network |
 | 5432 | PostgreSQL | Backend only |
 | 6379 | Redis | Backend only |
 | 9000 | MinIO | Backend only |
