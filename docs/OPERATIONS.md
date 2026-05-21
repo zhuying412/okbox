@@ -9,7 +9,7 @@
 docker compose ps
 
 # Check backend health
-curl -k https://localhost/api/v1/health
+curl http://localhost/api/v1/health
 
 # Check database connection
 docker compose exec postgres pg_isready

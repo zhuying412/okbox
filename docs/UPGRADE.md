@@ -64,13 +64,13 @@ docker compose up -d
 
 ```bash
 # Health check
-curl -k https://localhost/api/v1/health
+curl http://localhost/api/v1/health
 
 # Check logs for errors
 docker compose logs --tail=50 backend
 
 # Run smoke tests
-curl -k https://localhost/api/v1/auth/login -X POST \
+curl http://localhost/api/v1/auth/login -X POST \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"<pwd>"}'
 ```
@@ -95,7 +95,7 @@ docker compose build
 docker compose up -d
 
 # 5. Verify rollback
-curl -k https://localhost/api/v1/health
+curl http://localhost/api/v1/health
 ```
 
 ## Data Migration
