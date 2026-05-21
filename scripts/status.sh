@@ -26,6 +26,10 @@ echo -e "${NC}"
 
 cd "$PROJECT_ROOT/deploy"
 
+# ─── 读取 Nginx 端口配置 ─────────────────────────────────────────
+NGINX_PORT=$(grep -E "^NGINX_PORT=" "$PROJECT_ROOT/deploy/.env" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "80")
+NGINX_PORT="${NGINX_PORT:-80}"
+
 # ─── 检测当前环境 ────────────────────────────────────────────────
 if docker compose -f docker-compose.prod.yml ps --quiet 2>/dev/null | grep -q .; then
     COMPOSE_FILE="docker-compose.prod.yml"
@@ -48,10 +52,10 @@ echo ""
 info "健康检查（容器内执行）:"
 
 # Nginx 入口检查（唯一对外端口）
-if curl -sf http://localhost/api/v1/health >/dev/null 2>&1; then
-    success "应用入口:    http://localhost (健康)"
+if curl -sf http://localhost:${NGINX_PORT}/api/v1/health >/dev/null 2>&1; then
+    success "应用入口:    http://localhost:${NGINX_PORT} (健康)"
 else
-    warn "应用入口:    http://localhost (未响应)"
+    warn "应用入口:    http://localhost:${NGINX_PORT} (未响应)"
 fi
 
 # PostgreSQL（容器内检查）
@@ -86,10 +90,10 @@ fi
 echo ""
 info "对外端口（仅 Nginx）:"
 
-if lsof -i :80 >/dev/null 2>&1; then
-    echo -e "  端口 ${GREEN}80${NC}: Nginx 运行中"
+if lsof -i :${NGINX_PORT} >/dev/null 2>&1; then
+    echo -e "  端口 ${GREEN}${NGINX_PORT}${NC}: Nginx 运行中"
 else
-    echo -e "  端口 ${YELLOW}80${NC}: 空闲"
+    echo -e "  端口 ${YELLOW}${NGINX_PORT}${NC}: 空闲"
 fi
 
 # ─── 资源使用 ────────────────────────────────────────────────────

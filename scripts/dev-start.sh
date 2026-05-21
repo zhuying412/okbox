@@ -43,6 +43,10 @@ if [ ! -f "$PROJECT_ROOT/deploy/.env" ]; then
     fi
 fi
 
+# ─── 读取 Nginx 端口配置 ─────────────────────────────────────────
+NGINX_PORT=$(grep -E "^NGINX_PORT=" "$PROJECT_ROOT/deploy/.env" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "80")
+NGINX_PORT="${NGINX_PORT:-80}"
+
 # ─── 使用 Docker Compose 启动所有服务 ────────────────────────────
 info "使用 Docker Compose 启动所有开发服务..."
 
@@ -90,7 +94,7 @@ done
 
 # 通过 Nginx 入口验证整体服务可用性
 for i in $(seq 1 30); do
-    if curl -sf http://localhost/api/v1/health >/dev/null 2>&1; then
+    if curl -sf http://localhost:${NGINX_PORT}/api/v1/health >/dev/null 2>&1; then
         success "Nginx 代理已就绪（整体服务可用）"
         break
     fi
@@ -106,10 +110,15 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN}  开发环境启动成功！${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
 echo ""
-echo -e "  ${BLUE}应用入口:${NC}     http://localhost"
-echo -e "  ${BLUE}API 文档:${NC}     http://localhost/api/docs"
+if [ "$NGINX_PORT" = "80" ]; then
+    echo -e "  ${BLUE}应用入口:${NC}     http://localhost"
+    echo -e "  ${BLUE}API 文档:${NC}     http://localhost/api/docs"
+else
+    echo -e "  ${BLUE}应用入口:${NC}     http://localhost:${NGINX_PORT}"
+    echo -e "  ${BLUE}API 文档:${NC}     http://localhost:${NGINX_PORT}/api/docs"
+fi
 echo ""
-echo -e "  ${YELLOW}注意: 所有服务通过 Nginx 代理访问，不对外暴露其他端口${NC}"
+echo -e "  ${YELLOW}注意: 所有服务通过 Nginx 代理访问，仅对外暴露端口 ${NGINX_PORT}${NC}"
 echo ""
 echo -e "  ${YELLOW}常用命令:${NC}"
 echo -e "    查看日志:     docker compose -f deploy/docker-compose.yml logs -f"

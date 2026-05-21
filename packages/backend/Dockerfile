@@ -15,13 +15,16 @@ ENV UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 # Copy dependency files
 COPY pyproject.toml .
 
-# Install dependencies
+# Install dependencies only (利用 Docker 层缓存)
 RUN uv sync --no-dev --no-install-project
 
 # Copy source code
 COPY src/ src/
 COPY alembic/ alembic/
 COPY alembic.ini .
+
+# Install project itself (使 okbox 模块可被 Python 导入)
+RUN uv sync --no-dev
 
 # Expose port
 EXPOSE 8000
