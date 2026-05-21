@@ -40,18 +40,20 @@ if [ ! -f "$ENV_FILE" ]; then
     error "deploy/.env not found. Copy deploy/.env.example and configure it first."
 fi
 
-# Check critical environment variables
-source "$ENV_FILE"
+# Check critical environment variables (safely read without sourcing)
+SECRET_KEY=$(grep -E "^SECRET_KEY=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "")
+POSTGRES_PASSWORD=$(grep -E "^POSTGRES_PASSWORD=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "")
+MINIO_SECRET_KEY=$(grep -E "^MINIO_SECRET_KEY=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "")
 
-if [ "${SECRET_KEY:-}" = "change-me-in-production" ] || [ -z "${SECRET_KEY:-}" ]; then
+if [ "${SECRET_KEY}" = "change-me-in-production" ] || [ -z "${SECRET_KEY}" ]; then
     error "SECRET_KEY must be changed from default value! Generate with: openssl rand -hex 32"
 fi
 
-if [ "${POSTGRES_PASSWORD:-}" = "okbox" ]; then
+if [ "${POSTGRES_PASSWORD}" = "okbox" ]; then
     warn "POSTGRES_PASSWORD is still the default value. Consider changing for production."
 fi
 
-if [ "${MINIO_SECRET_KEY:-}" = "minioadmin" ]; then
+if [ "${MINIO_SECRET_KEY}" = "minioadmin" ]; then
     warn "MINIO_SECRET_KEY is still the default value. Consider changing for production."
 fi
 
@@ -82,8 +84,8 @@ info "Running health checks..."
 
 # Wait for backend to be ready
 for i in $(seq 1 60); do
-    if curl -sf http://localhost:8000/api/v1/health >/dev/null 2>&1; then
-        success "Backend API is healthy"
+    if curl -sf https://localhost/api/v1/health -k >/dev/null 2>&1; then
+        success "Backend API is healthy (via Nginx HTTPS)"
         break
     fi
     if [ "$i" -eq 60 ]; then

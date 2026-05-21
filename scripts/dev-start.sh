@@ -128,6 +128,19 @@ else
 fi
 success "Frontend dependencies installed"
 
+# ─── Cleanup Handler (defined before starting servers) ───────────────
+cleanup() {
+    echo ""
+    info "Shutting down development servers..."
+    pkill -f "uvicorn okbox.main:app" || true
+    pkill -f "vite" || true
+    info "Stopping Docker services..."
+    cd "$PROJECT_ROOT/deploy" && docker compose stop
+    success "All services stopped"
+}
+
+trap cleanup EXIT INT TERM
+
 # ─── Start Development Servers ───────────────────────────────────────
 info "Starting development servers..."
 
@@ -162,19 +175,6 @@ echo -e "  ${BLUE}MinIO:${NC}      http://localhost:9001 (admin/minioadmin)"
 echo ""
 echo -e "  ${YELLOW}Press Ctrl+C to stop all services${NC}"
 echo ""
-
-# ─── Handle Ctrl+C ──────────────────────────────────────────────────
-cleanup() {
-    echo ""
-    info "Shutting down development servers..."
-    kill $BACKEND_PID 2>/dev/null || true
-    kill $FRONTEND_PID 2>/dev/null || true
-    info "Stopping Docker services..."
-    cd "$PROJECT_ROOT/deploy" && docker compose stop
-    success "All services stopped"
-}
-
-trap cleanup EXIT INT TERM
 
 # Wait for background processes
 wait

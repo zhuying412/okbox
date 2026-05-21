@@ -75,8 +75,7 @@ echo ""
 info "Port usage:"
 
 for port in 80 443 3000 5432 6379 8000 9000 9001; do
-    if ss -tlnp 2>/dev/null | grep -q ":${port} " || \
-       netstat -tlnp 2>/dev/null | grep -q ":${port} "; then
+    if lsof -i :"${port}" >/dev/null 2>&1; then
         echo -e "  Port ${GREEN}${port}${NC}: in use"
     else
         echo -e "  Port ${YELLOW}${port}${NC}: free"
