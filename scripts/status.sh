@@ -1,98 +1,95 @@
 #!/usr/bin/env bash
-# ─── OKBox Status Check Script ───────────────────────────────────────
-# Usage: ./scripts/status.sh
+# ─── OKBox 状态检查脚本 ─────────────────────────────────────────────
+# 用法：./scripts/status.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Colors
-RED='\033[0;31m'
+# 颜色
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-success() { echo -e "${GREEN}[OK]${NC} $1"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+info() { echo -e "${BLUE}[信息]${NC} $1"; }
+success() { echo -e "${GREEN}[完成]${NC} $1"; }
+warn() { echo -e "${YELLOW}[警告]${NC} $1"; }
 
 echo -e "${CYAN}"
 echo "  ╔═══════════════════════════════════════╗"
-echo "  ║   OKBox Service Status                ║"
+echo "  ║   OKBox 服务状态                      ║"
 echo "  ╚═══════════════════════════════════════╝"
 echo -e "${NC}"
 
-# ─── Docker Services Status ──────────────────────────────────────────
-info "Docker Compose services:"
-echo ""
-
 cd "$PROJECT_ROOT/deploy"
 
-if docker compose ps --format "table {{.Service}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null; then
-    echo ""
-else
-    warn "No Docker Compose services found or Docker is not running"
-fi
-
-# ─── Health Checks ───────────────────────────────────────────────────
+# ─── Docker 服务状态 ─────────────────────────────────────────────
+info "Docker Compose 服务:"
 echo ""
-info "Health checks:"
 
-# Backend API
+# 检测当前运行的配置
+if docker compose -f docker-compose.prod.yml ps --quiet 2>/dev/null | grep -q .; then
+    COMPOSE_FILE="docker-compose.prod.yml"
+    echo -e "  环境: ${GREEN}生产${NC}"
+else
+    COMPOSE_FILE="docker-compose.yml"
+    echo -e "  环境: ${CYAN}开发${NC}"
+fi
+echo ""
+
+docker compose -f "$COMPOSE_FILE" ps --format "table {{.Service}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || \
+    warn "未发现运行中的 Docker Compose 服务"
+
+# ─── 健康检查 ────────────────────────────────────────────────────
+echo ""
+info "健康检查:"
+
 if curl -sf http://localhost:8000/api/v1/health >/dev/null 2>&1; then
-    success "Backend API:   http://localhost:8000 (healthy)"
-elif curl -sf https://localhost/api/v1/health -k >/dev/null 2>&1; then
-    success "Backend API:   https://localhost (healthy via Nginx)"
+    success "后端 API:    http://localhost:8000 (健康)"
+elif curl -sf http://localhost/api/v1/health >/dev/null 2>&1; then
+    success "后端 API:    http://localhost (通过 Nginx，健康)"
 else
-    warn "Backend API:   NOT RESPONDING"
+    warn "后端 API:    未响应"
 fi
 
-# PostgreSQL
-if docker compose exec -T postgres pg_isready -U okbox >/dev/null 2>&1; then
-    success "PostgreSQL:    port 5432 (ready)"
+if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U okbox >/dev/null 2>&1; then
+    success "PostgreSQL:  端口 5432 (就绪)"
 else
-    warn "PostgreSQL:    NOT READY"
+    warn "PostgreSQL:  未就绪"
 fi
 
-# Redis
-if docker compose exec -T redis redis-cli ping >/dev/null 2>&1; then
-    success "Redis:         port 6379 (ready)"
+if docker compose -f "$COMPOSE_FILE" exec -T redis redis-cli ping >/dev/null 2>&1; then
+    success "Redis:       端口 6379 (就绪)"
 else
-    warn "Redis:         NOT READY"
+    warn "Redis:       未就绪"
 fi
 
-# MinIO
 if curl -sf http://localhost:9000/minio/health/ready >/dev/null 2>&1; then
-    success "MinIO:         port 9000 (ready)"
+    success "MinIO:       端口 9000 (就绪)"
 else
-    warn "MinIO:         NOT READY"
+    warn "MinIO:       未就绪"
 fi
 
-# ─── Port Usage ──────────────────────────────────────────────────────
+# ─── 端口使用情况 ────────────────────────────────────────────────
 echo ""
-info "Port usage:"
+info "端口使用:"
 
-for port in 80 443 3000 5432 6379 8000 9000 9001; do
+for port in 80 3000 5432 6379 8000 9000 9001; do
     if lsof -i :"${port}" >/dev/null 2>&1; then
-        echo -e "  Port ${GREEN}${port}${NC}: in use"
+        echo -e "  端口 ${GREEN}${port}${NC}: 使用中"
     else
-        echo -e "  Port ${YELLOW}${port}${NC}: free"
+        echo -e "  端口 ${YELLOW}${port}${NC}: 空闲"
     fi
 done
 
-# ─── Resource Usage ──────────────────────────────────────────────────
+# ─── 资源使用 ────────────────────────────────────────────────────
 echo ""
-info "Resource usage (Docker containers):"
+info "容器资源使用:"
 echo ""
-
-docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}" 2>/dev/null | head -10 || warn "Unable to get container stats"
-
-# ─── Disk Usage ──────────────────────────────────────────────────────
-echo ""
-info "Docker disk usage:"
-docker system df 2>/dev/null || warn "Unable to get Docker disk usage"
+docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}" 2>/dev/null | head -10 || \
+    warn "无法获取容器资源信息"
 
 echo ""
-success "Status check complete"
+success "状态检查完成"
